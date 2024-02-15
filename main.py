@@ -1,12 +1,13 @@
 
 import os
-from PIL import Image
+from PIL import Image, ImageTk
 import customtkinter as ctk
 from tkinter import messagebox
 import connection_test
 from mp import mpfshell
 from tkinter import ttk
 import tkinter as tk
+import file_parser
 
 # Constants and Configuration
 TEST_MODE = False  # Set to True if testing without Abel TasTman connection
@@ -28,6 +29,9 @@ class App(ctk.CTk):
             self.shell.do_open(WIFI_ADDRESS)
             self.check_shell_connect()
 
+        self.shell.do_get('config.py config.txt')
+        with open("config.txt") as file:
+            self.config_dict = file_parser.config_parser(file)
         self.current_file_list = set()
         self.start_backend_loop()
         self.initialize_ui()
@@ -47,6 +51,7 @@ class App(ctk.CTk):
 
     def check_shell_connect(self):
         if not self.shell.do_check_connection():
+            self.shell.do_open(WIFI_ADDRESS)
             if not messagebox.askretrycancel("error", "Abel TasTman not connected"):
                 exit()
 
@@ -95,7 +100,7 @@ class App(ctk.CTk):
 
         # create second frame
         self.second_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        self.second_frame.grid(row=0, column=1, sticky="nsew")  # Adjust grid settings for expansion
+        #self.second_frame.grid(row=0, column=1, sticky="nsew")  # Adjust grid settings for expansion
         self.grid_columnconfigure(1, weight=1)  # Allow the column to expand
         try:
             self.create_file_explorer()
@@ -110,27 +115,52 @@ class App(ctk.CTk):
         #self.custombutton = ctk.CTkLabel(self.second_frame, text=self.shell.do_ls(''), text_color="#601E88", anchor="w", justify="left", font=("Urbanist", 24)).pack(anchor="w", pady=(50, 5), padx=(25, 0))
 
     def create_third_frame(self):
+        rowline = 0
+        # Connection label
+        self.connection_label = ctk.CTkLabel(self.third_frame, text="Wi-Fi", font=ctk.CTkFont(size=20, weight="bold", family='Urbanist'))
+        self.connection_label.grid(row=rowline, column=0, padx=0, pady=10)
+
+        rowline += 1
+        #self.connection_label = ctk.CTkLabel(self.third_frame, text="Operation", font=ctk.CTkFont(size=20, weight="bold", family='Urbanist'))
+        #self.connection_label.grid(row=0, column=1, padx=0, pady=10)
+        
         # SSID input field
-        self.ssid_entry = ctk.CTkEntry(self.third_frame, placeholder_text="SSID")
-        self.ssid_entry.grid(row=0, column=0, padx=10, pady=10)
+        self.wifi_label = ctk.CTkLabel(self.third_frame, text="Wi-Fi SSID")
+        self.wifi_label.grid(row=rowline, column=0, padx=10, pady=2)
+
+        self.wifi_label = ctk.CTkLabel(self.third_frame, text="Wi-Fi password")
+        self.wifi_label.grid(row=rowline, column=1, padx=10, pady=2)
+
+        rowline += 1
+        text = tk.StringVar() 
+        text.set(self.config_dict['SSID']) 
+        self.ssid_entry = ctk.CTkEntry(self.third_frame, textvariable= text)
+        self.ssid_entry.grid(row=rowline, column=0, padx=10, pady=2)
+
+        self.pwd_entry = ctk.CTkEntry(self.third_frame, placeholder_text="Wi-Fi password")
+        self.pwd_entry.grid(row=rowline, column=1, padx=10, pady=2)
+
+        rowline +=1
 
         # Interval input field
         self.interval_var = tk.StringVar()
         vcmd = (self.register(self.validate_interval), "%P")
         self.interval_entry = ctk.CTkEntry(self.third_frame, placeholder_text="Interval", textvariable=self.interval_var, validate="key", validatecommand=vcmd)
-        self.interval_entry.grid(row=1, column=0, padx=10, pady=10)
+        self.interval_entry.grid(row=rowline, column=0, padx=10, pady=10)
 
         # Label for displaying error message
         self.interval_error_label = ctk.CTkLabel(self.third_frame, text="")
-        self.interval_error_label.grid(row=1, column=1, padx=10, pady=10)
+        self.interval_error_label.grid(row=rowline, column=1, padx=10, pady=10)
+
+        rowline +=1
 
         # Energy saving mode toggle
         self.energy_saving_mode = ctk.CTkSwitch(self.third_frame, text="Energy Saving Mode")
-        self.energy_saving_mode.grid(row=2, column=0, padx=10, pady=10)
+        self.energy_saving_mode.grid(row=rowline, column=0, padx=10, pady=10)
 
-        # Save button
+        # Save button needs to be in footer
         self.save_button = ctk.CTkButton(self.third_frame, text="Save", command=self.save_configuration)
-        self.save_button.grid(row=3, column=0, padx=10, pady=10)
+        self.save_button.grid(row=5, column=0, padx=10, pady=10)
 
     def validate_interval(self, P):
         is_valid = True
@@ -162,19 +192,19 @@ class App(ctk.CTk):
         energy_mode = True if self.energy_saving_mode.get() else False
 
         # Write configuration to a file
-        with open("configuration.txt", "w") as file:
-            file.write(f"SSID: {ssid}\n")
-            file.write(f"Interval: {interval}\n")
-            file.write(f"Energy Saving Mode: {energy_mode}\n")
-
+        with open("config.txt", "w") as file:
+            file.write(f"SSID={ssid}\n")
+            file.write(f"Interval={interval}\n")
+            file.write(f"Energy_Saving_Mode={energy_mode}\n")
+        self.shell.do_put('config.txt config.py')
         messagebox.showinfo("Configuration Saved", "Your configuration has been saved successfully.")
 
     def create_file_explorer(self):
         # Create a Treeview widget
         self.tree = ttk.Treeview(self.second_frame)
         self.tree["columns"] = ("filename")
-        self.tree.column("#0", width=0, stretch=tk.NO)
-        self.tree.column("filename", anchor=tk.W, width=120)
+        self.tree.column("#0", width=0, stretch=tk.N)
+        self.tree.column("filename", anchor=tk.W)
         self.tree.heading("#0", text="", anchor=tk.W)
         self.tree.heading("filename", text="Filename", anchor=tk.W)
 
@@ -201,9 +231,10 @@ class App(ctk.CTk):
 
     def populate_file_explorer(self):
         try:
-            self.shell.do_cd('database/')
+            self.shell.do_cd('database')
             new_file_list = set(self.shell.do_ls(''))  # Getting the new file list
             new_file_list.remove('..')
+            self.shell.do_cd('..')
         except Exception as e:
             print(f'Error fetching file list: {e}')
             new_file_list = set()
@@ -227,24 +258,25 @@ class App(ctk.CTk):
 
     def download_file(self):
         selected_items = self.tree.selection()
+        self.shell.do_cd('database')
         if selected_items:
             for item in selected_items:
                 file_to_download = self.tree.item(item, 'values')[0]
                 print(file_to_download)
                 self.shell.do_get(file_to_download)
-            # Code to handle file download
+        self.shell.do_cd('..')
         self.populate_file_explorer()
 
     def remove_file(self):
         selected_items = self.tree.selection()
+        self.shell.do_cd('database')
         if selected_items:
             if messagebox.askokcancel(title = 'Permanently delete?', message = 'Are you sure you want to delete the selected files?'):
                 for item in selected_items:
                     file_to_remove = self.tree.item(item, 'values')[0]
                     print(file_to_remove)
                     self.shell.do_rm(file_to_remove)
-            # Code to handle file removal
-            #are you sure notification
+        self.shell.do_cd('..')
         self.populate_file_explorer()
 
     def select_frame_by_name(self, name):
